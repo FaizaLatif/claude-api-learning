@@ -53,6 +53,7 @@ async function getWeather(city: string): Promise<string> {
   ];
 
 
+while (true) {
 
   const response = await client.messages.create({
     model: "claude-haiku-5-5",
@@ -60,9 +61,13 @@ async function getWeather(city: string): Promise<string> {
     tools,
     messages,
   });
+messages.push({ role: "assistant", content: response.content});   // o que o Claude pediu
 
-for (const block of response.content) {
-  console.log(block.type, block);
+if (response.stop_reason !== "tool_use") {
+  for (const block of response.content) {
+    if (block.type === "text") console.log(block.text);
+  }
+  break;
 }
 
 // 1. Correr as ferramentas que o Claude pediu
@@ -70,7 +75,7 @@ const results: Anthropic.ToolResultBlockParam[] = [];
 
 for (const block of response.content) {
   if (block.type === "tool_use") {
-    const { city, unit } = block.input as { city: string; unit: "celsius" | "fahrenheit" };
+    const { city } = block.input as { city: string };
     const weather = await getWeather(city);
     console.log(`🔧 ${city}:`, weather);
 
@@ -81,21 +86,10 @@ for (const block of response.content) {
     });
   }
 }
-console.log(results);
-
+messages.push({ role: "user", content: results });   // o que o Claude pediu
 // 2. Segundo pedido: enviar a conversa TODA + os resultados
-const response2 = await client.messages.create({
-  model: "claude-haiku-5-5",
-  max_tokens: 2048,
-  tools,
-  messages: [
-    { role: "user", content: "Should I bring an umbrella in Lisbon and Porto today?" },
-    { role: "assistant", content: response.content },   // o que o Claude pediu
-    { role: "user", content: results },                 // o que tu respondeste
-  ],
-});
 
-console.log("stop_reason:", response2.stop_reason);
-for (const block of response2.content) {
-  if (block.type === "text") console.log(block.text);
+
+
+
 }
