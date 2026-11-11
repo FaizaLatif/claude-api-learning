@@ -15,7 +15,9 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic();
 
-const tools: Anthropic.Tool[] = [
+const tools: Anthropic.ToolUnion[] = [
+  // Required for skills: they run inside Claude's code execution sandbox.
+  { type: "code_execution_20260521", name: "code_execution" },
   {
     name: "get_weather",
     description:
@@ -47,12 +49,13 @@ const tools: Anthropic.Tool[] = [
   },
 ];
 
-function runTool(name: string, input): Promise<string> {
+function runTool(name: string, input: unknown): Promise<string> {
+ const args = input as { city: string; days: number };
  switch (name) {
     case "get_weather":
-      return getWeather(input.city);
+      return getWeather(args.city);
     case "get_forecast":
-      return getForecast(input.city, input.days);
+      return getForecast(args.city, args.days);
     default:
       throw new Error(`Unknown tool: ${name}`); 
   }
@@ -99,16 +102,28 @@ async function getWeather(city: string): Promise<string> {
   ];
 
 
+let containerId: string | undefined;   // reuse the same sandbox on every turn
+
 while (true) {
 
   const response = await client.messages.create({
     model: "claude-haiku-5-5",
     max_tokens: 2048,
+    container: {
+    ...(containerId ? { id: containerId } : {}),
+    skills: [
+      { type: "custom", skill_id: "skill_014hAptmjs9wLJaaGqAUQj55", version: "latest" },
+    ],
+  },
     thinking: { type: "adaptive", display: "summarized" },
     tools,
     messages,
   });
 messages.push({ role: "assistant", content: response.content});   // o que o Claude pediu
+containerId = response.container?.id ?? containerId;
+
+// Server tools (code execution) can pause a long turn: send it back to continue.
+if (response.stop_reason === "pause_turn") continue;
 
 if (response.stop_reason !== "tool_use") {
   for (const block of response.content) {
