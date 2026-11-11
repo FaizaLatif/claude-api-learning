@@ -104,6 +104,7 @@ while (true) {
   const response = await client.messages.create({
     model: "claude-haiku-5-5",
     max_tokens: 2048,
+    thinking: { type: "adaptive", display: "summarized" },
     tools,
     messages,
   });
@@ -111,6 +112,8 @@ messages.push({ role: "assistant", content: response.content});   // o que o Cla
 
 if (response.stop_reason !== "tool_use") {
   for (const block of response.content) {
+      if (block.type === "thinking") console.log("💭 THINKING:\n", block.thinking);
+
     if (block.type === "text") console.log(block.text);
   }
   break;
